@@ -52,6 +52,18 @@
            revision="UwU"
            clone-depth="1" />
 
+  <project path="kernel/oneplus/sm8750-modules"
+           name="android_kernel_oneplus_sm8750-modules"
+           remote="spiral"
+           revision="UwU"
+           clone-depth="1" />
+
+  <project path="kernel/oneplus/sm8750-devicetrees"
+           name="android_kernel_oneplus_sm8750-devicetrees"
+           remote="spiral"
+           revision="bq2"
+           clone-depth="1" />
+
   <!-- Hardware -->
   <project path="hardware/oplus"
            name="android_hardware_los_oplus"
