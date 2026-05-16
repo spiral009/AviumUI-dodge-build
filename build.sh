@@ -3,7 +3,7 @@
 # AviumUI OnePlus 13 (dodge) - Build & Package Script
 # =============================================================================
 # This script automates building AviumUI ROM and packaging it into an
-# OrangeFox Recovery flashable ZIP with raw partition images.
+# OrangeFox Recovery flashable ZIP with sparse partition images.
 #
 # Usage:
 #   ./build.sh [userdebug|user|eng] [--clean]
@@ -245,8 +245,18 @@ for img in boot.img init_boot.img dtbo.img vendor_boot.img vbmeta.img vbmeta_sys
 done
 
 # Flash super (not slotted, large - stream to avoid OOM)
+# Detect if sparse and convert on-the-fly
 ui_print "Flashing super.img (this may take a while)..."
-unzip -p "$ZIP" "super.img" | dd of="/dev/block/by-name/super" bs=8M status=none
+
+# Extract header to check if sparse
+unzip -p "$ZIP" "super.img" | head -c 4 > /tmp/super_header
+if grep -q '3A737030' /tmp/super_header 2>/dev/null || grep -q 'sp' /tmp/super_header 2>/dev/null; then
+    ui_print "  Detected sparse image, converting..."
+    unzip -p "$ZIP" "super.img" | simg2img - /dev/block/by-name/super
+else
+    unzip -p "$ZIP" "super.img" | dd of="/dev/block/by-name/super" bs=8M status=none
+fi
+
 if [ $? -eq 0 ]; then
     ui_print "  OK"
 else
