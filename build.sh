@@ -178,18 +178,77 @@ if [[ ${#MISSING_IMAGES[@]} -gt 0 ]]; then
 fi
 
 # =============================================================================
-# Create OrangeFox update-binary
+# Create OrangeFox update-binary and updater-script
 # =============================================================================
 
-echo -e "${YELLOW}[7/8] Creating OrangeFox update-binary...${NC}"
+echo -e "${YELLOW}[7/8] Creating OrangeFox installer...${NC}"
 
 mkdir -p "${STAGING_DIR}/META-INF/com/google/android"
 
-cat > "${STAGING_DIR}/META-INF/com/google/android/update-binary" << 'EOF'
-#!/sbin/sh
-# AviumUI OnePlus 13 (dodge) OrangeFox Installer
-# Auto-detects slot and flashes all images via dd
+# Create updater-script (standard Edify syntax)
+cat > "${STAGING_DIR}/META-INF/com/google/android/updater-script" << 'UPDATEOF'
+ui_print("");
+ui_print("========================================");
+ui_print("  AviumUI for OnePlus 13 (dodge)");
+ui_print("========================================");
+ui_print("");
 
+ui_print("Setting active slot to A...");
+run_program("/system/bin/bootctl", "set-active-boot-slot", "0");
+ui_print("Done.");
+ui_print("");
+
+ui_print("Flashing boot partitions to both slots...");
+package_extract_file("boot.img", "/dev/block/by-name/boot_a");
+package_extract_file("boot.img", "/dev/block/by-name/boot_b");
+package_extract_file("init_boot.img", "/dev/block/by-name/init_boot_a");
+package_extract_file("init_boot.img", "/dev/block/by-name/init_boot_b");
+package_extract_file("dtbo.img", "/dev/block/by-name/dtbo_a");
+package_extract_file("dtbo.img", "/dev/block/by-name/dtbo_b");
+package_extract_file("vendor_boot.img", "/dev/block/by-name/vendor_boot_a");
+package_extract_file("vendor_boot.img", "/dev/block/by-name/vendor_boot_b");
+ui_print("Done.");
+ui_print("");
+
+ui_print("Flashing vbmeta partitions to both slots...");
+package_extract_file("vbmeta.img", "/dev/block/by-name/vbmeta_a");
+package_extract_file("vbmeta.img", "/dev/block/by-name/vbmeta_b");
+package_extract_file("vbmeta_system.img", "/dev/block/by-name/vbmeta_system_a");
+package_extract_file("vbmeta_system.img", "/dev/block/by-name/vbmeta_system_b");
+package_extract_file("vbmeta_vendor.img", "/dev/block/by-name/vbmeta_vendor_a");
+package_extract_file("vbmeta_vendor.img", "/dev/block/by-name/vbmeta_vendor_b");
+ui_print("Done.");
+ui_print("");
+
+show_progress(0.700000, 0);
+ui_print("Flashing super partition (this may take a while)...");
+package_extract_file("super.img", "/sdcard/super_temp.img");
+run_program("/system/bin/simg2img", "/sdcard/super_temp.img", "/dev/block/by-name/super");
+run_program("/system/bin/rm", "-f", "/sdcard/super_temp.img");
+set_progress(0.886667);
+ui_print("Done.");
+ui_print("");
+
+ui_print("========================================");
+ui_print("  Flash complete!");
+ui_print("========================================");
+ui_print("Reboot to system when ready.");
+ui_print("If you need RW super, flash ro2rw");
+ui_print("module from OrangeFox after first boot.");
+ui_print("========================================");
+set_progress(1.000000);
+UPDATEOF
+
+# Extract standard update-binary from OTA build
+OTA_UPDATE_BINARY="${PRODUCT_OUT}/obj/PACKAGING/target_files_intermediates/lineage_dodge-target_files/META-INF/com/google/android/update-binary"
+if [[ -f "$OTA_UPDATE_BINARY" ]]; then
+    cp "$OTA_UPDATE_BINARY" "${STAGING_DIR}/META-INF/com/google/android/update-binary"
+else
+    echo -e "${YELLOW}Warning: Standard update-binary not found, using shell-based installer${NC}"
+    # Create a shell-based update-binary as fallback
+    cat > "${STAGING_DIR}/META-INF/com/google/android/update-binary" <> 'BINARY'
+#!/sbin/sh
+# Fallback update-binary for OrangeFox
 OUTFD="$2"
 ZIP="$3"
 
@@ -206,79 +265,29 @@ ui_print ""
 # Detect slot
 SLOT=$(getprop ro.boot.slot_suffix 2>/dev/null)
 if [ -z "$SLOT" ]; then
-    SLOT=$(cat /proc/cmdline | grep -o 'androidboot.slot_suffix=[^ ]*' | cut -d= -f2)
-fi
-if [ -z "$SLOT" ]; then
     SLOT="_a"
 fi
 ui_print "Detected slot: ${SLOT}"
-ui_print ""
 
-# Extract and flash each image
-TMPDIR=/tmp/avium_install
-mkdir -p "$TMPDIR"
-cd "$TMPDIR"
-
-# List of slot-aware partitions (super is NOT slotted)
-SLOT_AWARE="boot init_boot dtbo vendor_boot vbmeta vbmeta_system vbmeta_vendor"
-
-for img in boot.img init_boot.img dtbo.img vendor_boot.img vbmeta.img vbmeta_system.img vbmeta_vendor.img; do
-    partition="${img%.img}"
-    
-    # Check if partition is slotted
-    if echo "$SLOT_AWARE" | grep -qw "$partition"; then
-        target="${partition}${SLOT}"
-    else
-        target="$partition"
-    fi
-    
-    ui_print "Flashing ${img} -> ${target}..."
-    
-    # Stream extract and flash
-    unzip -p "$ZIP" "$img" | dd of="/dev/block/by-name/${target}" bs=4M status=none
-    
-    if [ $? -eq 0 ]; then
-        ui_print "  OK"
-    else
-        ui_print "  FAILED!"
+# Flash images
+for img in boot init_boot dtbo vendor_boot vbmeta vbmeta_system vbmeta_vendor; do
+    if [ -f "${img}.img" ]; then
+        ui_print "Flashing ${img}.img..."
+        unzip -p "$ZIP" "${img}.img" | dd of="/dev/block/by-name/${img}${SLOT}" bs=4M status=none
     fi
 done
 
-# Flash super (not slotted, large - stream to avoid OOM)
-# Detect if sparse and convert on-the-fly
-ui_print "Flashing super.img (this may take a while)..."
+# Flash super
+ui_print "Flashing super.img..."
+unzip -p "$ZIP" "super.img" | dd of="/dev/block/by-name/super" bs=8M status=none
 
-# Extract header to check if sparse
-unzip -p "$ZIP" "super.img" | head -c 4 > /tmp/super_header
-if grep -q '3A737030' /tmp/super_header 2>/dev/null || grep -q 'sp' /tmp/super_header 2>/dev/null; then
-    ui_print "  Detected sparse image, converting..."
-    unzip -p "$ZIP" "super.img" | simg2img - /dev/block/by-name/super
-else
-    unzip -p "$ZIP" "super.img" | dd of="/dev/block/by-name/super" bs=8M status=none
-fi
-
-if [ $? -eq 0 ]; then
-    ui_print "  OK"
-else
-    ui_print "  FAILED!"
-fi
-
-# Sync to ensure writes complete
 sync
-
-ui_print ""
+ui_print "Flash complete!"
 ui_print "========================================"
-ui_print "  Flash complete!"
-ui_print "========================================"
-ui_print "Reboot to system when ready."
-ui_print "If you need RW super, flash ro2rw"
-ui_print "module from OrangeFox after first boot."
-ui_print "========================================"
-
 exit 0
-EOF
-
-chmod +x "${STAGING_DIR}/META-INF/com/google/android/update-binary"
+BINARY
+    chmod +x "${STAGING_DIR}/META-INF/com/google/android/update-binary"
+fi
 
 # =============================================================================
 # Package ZIP
@@ -291,9 +300,10 @@ ZIP_NAME="AviumUI-dodge-${DATE}-${BUILD_TYPE}.zip"
 OUTPUT_DIR="${PWD}"
 OUTPUT_ZIP="${OUTPUT_DIR}/${ZIP_NAME}"
 
-# Use zip -0 (store, no compression) for large images
+# Use zip -1 (fast compression) for reasonable size
+# Sparse images compress well, boot images don't compress much
 cd "$STAGING_DIR"
-zip -r0 "$OUTPUT_ZIP" .
+zip -r1 "$OUTPUT_ZIP" .
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
