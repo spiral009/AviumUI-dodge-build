@@ -1,0 +1,50 @@
+ui_print("");
+ui_print("========================================");
+ui_print("  AviumUI for OnePlus 13 (dodge)");
+ui_print("========================================");
+ui_print("");
+
+ui_print("Setting active slot to A...");
+run_program("/system/bin/bootctl", "set-active-boot-slot", "0");
+ui_print("Done.");
+ui_print("");
+
+ui_print("Flashing boot partitions to both slots...");
+package_extract_file("boot.img", "/dev/block/by-name/boot_a");
+package_extract_file("boot.img", "/dev/block/by-name/boot_b");
+package_extract_file("init_boot.img", "/dev/block/by-name/init_boot_a");
+package_extract_file("init_boot.img", "/dev/block/by-name/init_boot_b");
+package_extract_file("dtbo.img", "/dev/block/by-name/dtbo_a");
+package_extract_file("dtbo.img", "/dev/block/by-name/dtbo_b");
+package_extract_file("vendor_boot.img", "/dev/block/by-name/vendor_boot_a");
+package_extract_file("vendor_boot.img", "/dev/block/by-name/vendor_boot_b");
+ui_print("Done.");
+ui_print("");
+
+ui_print("Flashing vbmeta partitions to both slots...");
+package_extract_file("vbmeta.img", "/dev/block/by-name/vbmeta_a");
+package_extract_file("vbmeta.img", "/dev/block/by-name/vbmeta_b");
+package_extract_file("vbmeta_system.img", "/dev/block/by-name/vbmeta_system_a");
+package_extract_file("vbmeta_system.img", "/dev/block/by-name/vbmeta_system_b");
+package_extract_file("vbmeta_vendor.img", "/dev/block/by-name/vbmeta_vendor_a");
+package_extract_file("vbmeta_vendor.img", "/dev/block/by-name/vbmeta_vendor_b");
+ui_print("Done.");
+ui_print("");
+
+show_progress(0.700000, 0);
+ui_print("Flashing super partition (this may take a while)...");
+package_extract_file("super.img", "/sdcard/super_temp.img");
+run_program("/system/bin/simg2img", "/sdcard/super_temp.img", "/dev/block/by-name/super");
+run_program("/system/bin/rm", "-f", "/sdcard/super_temp.img");
+set_progress(0.886667);
+ui_print("Done.");
+ui_print("");
+
+ui_print("========================================");
+ui_print("  Flash complete!");
+ui_print("========================================");
+ui_print("Reboot to system when ready.");
+ui_print("If you need RW super, flash ro2rw");
+ui_print("module from OrangeFox after first boot.");
+ui_print("========================================");
+set_progress(1.000000);
