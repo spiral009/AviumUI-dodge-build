@@ -144,7 +144,13 @@ for d in /data /sdcard /external_sd /tmp; do
 done
 [ -n "$TMP" ] || abort "no temp dir with >8GB free for super.img"
 ui_print "  temp: $TMP"
-uz -o "$ZIP" super.img -d "$TMP" >/dev/null 2>&1 || abort "extract super.img"
+# Stream-extract (uz -p) instead of `unzip -d`: busybox unzip in some recovery
+# builds (e.g. OrangeFox R12) fails / returns spurious non-zero on a >4GB ZIP64
+# member when extracting to a directory. Streaming to a file + size-check is robust.
+uz -p "$ZIP" super.img > "$TMP/super.img"
+sz=$(wc -c < "$TMP/super.img" 2>/dev/null || echo 0)
+ui_print "  extracted ${sz} bytes"
+[ "$sz" -gt 4000000000 ] || abort "super.img extract too small (${sz}) — unzip failed"
 SUPER_BLK="/dev/block/by-name/super"
 [ -e "$SUPER_BLK" ] || abort "super partition not found"
 if have simg2img; then
